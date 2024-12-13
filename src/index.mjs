@@ -1,89 +1,20 @@
 import express from "express";
+import { resolveIndexByUser } from "./middleware/resolveIndexByUser.mjs";
+import { mockUsers } from "./mock/users.mjs";
+import { loggingMiddleware } from "./middleware/logging.mjs";
 
 const app = express();
 app.use(express.json());
+app.use(loggingMiddleware);
 
-const PORT = process.env.PORT || 3000;
-
-const mockUsers = [
-  {
-    id: 1,
-    username: "guri",
-    email: "guri@email.com",
-    role: "developer",
-  },
-  {
-    id: 2,
-    username: "noveli",
-    email: "noveli@email.com",
-    role: "designer",
-  },
-  {
-    id: 3,
-    username: "joaozinho",
-    email: "joaozinho@email.com",
-    role: "manager",
-  },
-  {
-    id: 4,
-    username: "ana_silva",
-    email: "ana.silva@email.com",
-    role: "analyst",
-  },
-  {
-    id: 5,
-    username: "pedro_dev",
-    email: "pedro.dev@email.com",
-    role: "developer",
-  },
-  {
-    id: 6,
-    username: "mari_costa",
-    email: "mari.costa@email.com",
-    role: "product_owner",
-  },
-  {
-    id: 7,
-    username: "lucas_santos",
-    email: "lucas.santos@email.com",
-    role: "developer",
-  },
-  {
-    id: 8,
-    username: "carol_lima",
-    email: "carol.lima@email.com",
-    role: "designer",
-  },
-  {
-    id: 9,
-    username: "rafael_alves",
-    email: "rafael.alves@email.com",
-    role: "analyst",
-  },
-  {
-    id: 10,
-    username: "julia_teix",
-    email: "julia.teix@email.com",
-    role: "manager",
-  },
-];
-
-app.listen(PORT, () => {
-  console.log(`Running on ${PORT}`);
+app.listen(3000, () => {
+  console.log(`Running on ${3000}`);
 });
 
-app.get("/", (request, response) => {
-  response.status(201).send({ msg: "Hello" });
-});
+app.get("/api/users/:id", resolveIndexByUser, (request, response) => {
+  const { findUserIndex } = request;
 
-app.get("/api/users/:id", (request, response) => {
-  const parseId = parseInt(request.params.id);
-
-  if (isNaN(parseId)) {
-    return response.status(400).send({ msg: "Bad Request. Invalid ID" });
-  }
-
-  const findUser = mockUsers.find((user) => user.id === parseId);
+  const findUser = mockUsers[findUserIndex];
 
   if (!findUser) return response.sendStatus(404);
 
@@ -117,57 +48,24 @@ app.post("/api/users", (request, response) => {
   response.status(201).send(newUserId);
 });
 
-app.put("/api/users/:id", (request, response) => {
-  const {
-    body,
-    params: { id },
-  } = request;
+app.put("/api/users/:id", resolveIndexByUser, (request, response) => {
+  const { body, findUserIndex } = request;
 
-  const parsedId = parseInt(id);
-
-  if (isNaN(parsedId)) return response.sendStatus(400);
-
-  const findUserIndex = mockUsers.findIndex((user) => user.id === parsedId);
-
-  if (findUserIndex === -1)
-    return response.sendStatus(404).send("Not found user");
-
-  mockUsers[findUserIndex] = { id: parsedId, ...body };
+  mockUsers[findUserIndex] = { id: mockUsers[findUserIndex].id, ...body };
 
   return response.sendStatus(200);
 });
 
-app.patch("/api/users/:id", (request, response) => {
-  const {
-    body,
-    params: { id },
-  } = request;
-
-  const parsedId = parseInt(id);
-
-  if (isNaN(parsedId)) return response.sendStatus(400);
-
-  const findUserIndex = mockUsers.findIndex((user) => user.id === parsedId);
-
-  if (findUserIndex === -1) return response.sendStatus(404);
+app.patch("/api/users/:id", resolveIndexByUser, (request, response) => {
+  const { body, findUserIndex } = request;
 
   mockUsers[findUserIndex] = { ...mockUsers[findUserIndex], ...body };
 
   return response.sendStatus(200);
 });
 
-app.delete("/api/users/:id", (request, response) => {
-  const {
-    params: { id },
-  } = request;
-
-  const parsedId = parseInt(id);
-
-  if (isNaN(parsedId)) return response.sendStatus(400);
-
-  const findUserIndex = mockUsers.findIndex((user) => user.id === parsedId);
-
-  if (findUserIndex === -1) return response.sendStatus(404);
+app.delete("/api/users/:id", resolveIndexByUser, (request, response) => {
+  const { findUserIndex } = request;
 
   mockUsers.splice(findUserIndex, 1);
 
