@@ -1,106 +1,86 @@
-import express from "express";
-import { resolveIndexByUser } from "./middleware/resolveIndexByUser.mjs";
+import express, { request, response } from "express";
+import routes from "./routes/index.mjs";
+import cookieParser from "cookie-parser";
+import session from "express-session";
 import { mockUsers } from "./mock/users.mjs";
-import { loggingMiddleware } from "./middleware/logging.mjs";
-import {
-  query,
-  validationResult,
-  matchedData,
-  checkSchema,
-} from "express-validator";
-import { createUserValidationSchema } from "./utils/validationSchemas.mjs";
 
 const app = express();
 
-app.use(express.json(), loggingMiddleware);
+app.use(express.json());
+app.use(cookieParser("helloworld"));
+app.use(
+  session({
+    secret: "gstv57",
+    saveUninitialized: false,
+    resave: false,
+    cookie: {
+      maxAge: 60000 * 60,
+    },
+  })
+);
+app.use(routes);
 
 app.listen(3000, () => {
   console.log(`Running on ${3000}`);
 });
 
-app.get(
-  "/api/users",
-  [
-    query("filter")
-      .isString()
-      .withMessage("Must be string")
-      .notEmpty()
-      .withMessage("Must not be empty")
-      .isLength({ min: 3, max: 10 })
-      .withMessage("Must be at least 3-10 characters"),
-  ],
-  (request, response) => {
-    const result = validationResult(request);
+app.get("/", (request, response) => {
+  console.log(request.session);
+  console.log(request.session.id);
+  request.session.visited = true;
+  response.cookie("hello", "world", {
+    maxAge: 10000,
+    signed: true,
+  });
 
-    // console.log(result["errors"]);
-    const {
-      query: { filter, value },
-    } = request;
+  response.status(201).send({ msg: "hello" });
+});
 
-    if (!filter && !value) {
-      return response.send(mockUsers);
-    }
+app.post("/api/auth", (request, response) => {
+  const {
+    body: { username, password },
+  } = request;
 
-    if (filter && value) {
-      return response.send(
-        mockUsers.filter(
-          (user) => user[filter].includes(value) || user[filter] === value
-        )
-      );
-    }
+  const findUser = mockUsers.find((user) => user.username === username);
 
-    return response.send(mockUsers);
-  }
-);
+  if (!findUser || findUser.password !== password)
+    return response.status(401).send({ msg: "BAD CREDENTIALS" });
 
-app.get("/api/users/:id", resolveIndexByUser, (request, response) => {
-  const { findUserIndex } = request;
-
-  const findUser = mockUsers[findUserIndex];
-
-  if (!findUser) return response.sendStatus(404);
+  request.session.user = findUser;
 
   return response.status(200).send(findUser);
 });
 
-app.post(
-  "/api/users",
-  checkSchema(createUserValidationSchema),
-  (request, response) => {
-    const result = validationResult(request);
+app.get("/api/auth/status", (request, response) => {
+  request.sessionStore.get(request.sessionID, (err, session) => {
+    console.log(session);
+  });
 
-    if (!result.isEmpty())
-      return response.status(400).send({ errors: result.errors });
+  return request.session.user
+    ? response.status(200).send(request.session.user)
+    : response.status(401).send({
+        msg: "Not Authenticated",
+      });
+});
 
-    const data = matchedData(request);
+app.post("/api/cart", (request, response) => {
+  if (!request.session.user) return response.sendStatus(401);
 
-    const newUserId = { id: mockUsers[mockUsers.length - 1].id + 1, ...data };
-    mockUsers.push(newUserId);
+  const { body: item } = request;
 
-    response.status(201).send(newUserId);
+  const { cart } = request.session;
+
+  if (cart) {
+    cart.push(item);
+  } else {
+    request.session.cart = [item];
   }
-);
 
-app.put("/api/users/:id", resolveIndexByUser, (request, response) => {
-  const { body, findUserIndex } = request;
-
-  mockUsers[findUserIndex] = { id: mockUsers[findUserIndex].id, ...body };
-
-  return response.sendStatus(200);
+  return response.status(201).send(item);
 });
 
-app.patch("/api/users/:id", resolveIndexByUser, (request, response) => {
-  const { body, findUserIndex } = request;
+app.get("/api/cart", (request, response) => {
+  if (!request.session.user) return response.sendStatus(401);
 
-  mockUsers[findUserIndex] = { ...mockUsers[findUserIndex], ...body };
-
-  return response.sendStatus(200);
-});
-
-app.delete("/api/users/:id", resolveIndexByUser, (request, response) => {
-  const { findUserIndex } = request;
-
-  mockUsers.splice(findUserIndex, 1);
-
-  return response.sendStatus(204);
+  return response.send(request.session.cart ?? []);
 });
